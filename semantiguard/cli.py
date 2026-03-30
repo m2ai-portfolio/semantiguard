@@ -3,9 +3,12 @@
 import json
 import sys
 import click
+from pathlib import Path
 
 from semantiguard.parser import parse_manifest
 from semantiguard.db import init_db, seed_sample_data, lookup_advisories
+from semantiguard.models import ScanResult, Advisory
+from semantiguard.reporter import format_table, format_json, has_findings
 
 
 @click.group()
@@ -84,6 +87,82 @@ def lookup(package: str, version: str):
     except Exception as e:
         click.echo(f"Error looking up advisories: {e}", err=True)
         sys.exit(1)
+
+
+@cli.command()
+@click.argument('file_path', type=click.Path(exists=False, resolve_path=True))
+@click.option('--format', 'output_format', type=click.Choice(['table', 'json']), default='table', help='Output format')
+def scan(file_path: str, output_format: str):
+    """Scan a dependency manifest for known vulnerabilities.
+
+    Parses the manifest file, queries the local database for known CVEs,
+    and reports findings in table or JSON format.
+
+    Supported manifest formats:
+    - requirements.txt
+    - pyproject.toml
+
+    Exit codes:
+    - 0: No vulnerabilities found
+    - 1: Vulnerabilities found
+    - 2: File not found or other error
+
+    Example:
+        semantiguard scan requirements.txt
+        semantiguard scan --format json pyproject.toml
+    """
+    try:
+        # Check if database exists, initialize if needed
+        from semantiguard.db import get_db_path
+        db_path = Path(get_db_path())
+        if not db_path.exists():
+            click.echo("Database not initialized. Run 'semantiguard init-db' first.", err=True)
+            sys.exit(2)
+
+        # Parse the manifest file
+        dependencies = parse_manifest(file_path)
+
+        # Lookup advisories for each dependency
+        scan_results = []
+        for dep in dependencies:
+            advisories_data = lookup_advisories(dep.name, dep.version)
+            advisories = [
+                Advisory(
+                    cve_id=adv['cve_id'],
+                    severity=adv['severity'],
+                    description=adv.get('description')
+                )
+                for adv in advisories_data
+            ]
+            scan_results.append(ScanResult(
+                package=dep.name,
+                version=dep.version,
+                advisories=advisories
+            ))
+
+        # Format and output results
+        if output_format == 'json':
+            output = format_json(scan_results)
+        else:
+            output = format_table(scan_results)
+
+        click.echo(output)
+
+        # Exit with appropriate code
+        if has_findings(scan_results):
+            sys.exit(1)
+        else:
+            sys.exit(0)
+
+    except FileNotFoundError as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(2)
+    except (ValueError, IOError, PermissionError) as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(2)
+    except Exception as e:
+        click.echo(f"Unexpected error: {e}", err=True)
+        sys.exit(2)
 
 
 if __name__ == "__main__":
