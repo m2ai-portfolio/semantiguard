@@ -5,6 +5,7 @@ import sys
 import click
 
 from semantiguard.parser import parse_manifest
+from semantiguard.db import init_db, seed_sample_data, lookup_advisories
 
 
 @click.group()
@@ -43,6 +44,45 @@ def parse(file_path: str):
         sys.exit(1)
     except Exception as e:
         click.echo(f"Unexpected error: {e}", err=True)
+        sys.exit(1)
+
+
+@cli.command()
+def init_db_command():
+    """Initialize the SQLite database and seed with sample CVE data.
+
+    Creates the database file at SEMANTIGUARD_DB_PATH (default: ./semantiguard.db)
+    with the advisories table schema and populates it with sample vulnerability data.
+
+    Example:
+        semantiguard init-db
+    """
+    try:
+        init_db()
+        seed_sample_data()
+        click.echo("DB initialized")
+    except Exception as e:
+        click.echo(f"Error initializing database: {e}", err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.option('--package', required=True, help='Package name to lookup')
+@click.option('--version', required=True, help='Package version to lookup')
+def lookup(package: str, version: str):
+    """Lookup CVE advisories for a specific package and version.
+
+    Queries the local SQLite database for known vulnerabilities matching
+    the provided package name and version.
+
+    Example:
+        semantiguard lookup --package requests --version 2.28.1
+    """
+    try:
+        advisories = lookup_advisories(package, version)
+        click.echo(json.dumps(advisories, indent=2))
+    except Exception as e:
+        click.echo(f"Error looking up advisories: {e}", err=True)
         sys.exit(1)
 
 
