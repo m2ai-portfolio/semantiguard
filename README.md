@@ -3,7 +3,7 @@
   <img src="assets/infographic.png" alt="Semantiguard" width="800">
 </p>
 
-<h3 align="center">ONE-LINE DESCRIPTION OF WHAT THIS DOES</h3>
+<h3 align="center">Offline, local-first supply chain vulnerability scanner using semantic code analysis</h3>
 
 <p align="center">
   <a href="#quick-start">Quick Start</a> &bull;
